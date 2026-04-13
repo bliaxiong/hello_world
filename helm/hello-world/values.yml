@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/bliaxiong/hello-world
+  repository: ghcr.io/bliaxiong/hello_world
   pullPolicy: IfNotPresent
   # CI pipeline overwrites this field on every merge to main
   tag: "latest"

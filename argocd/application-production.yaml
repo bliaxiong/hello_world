@@ -6,7 +6,7 @@
 # spec:
 #   project: default
 #   source:
-#     repoURL: https://github.com/bliaxiong/hello-world
+#     repoURL: https://github.com/bliaxiong/hello_world
 #     targetRevision: master
 #     path: helm/hello-world
 #     helm:
