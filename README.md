@@ -11,6 +11,10 @@ github action public library:
 
 https://github.com/marketplace?type=actions
 
+### Notes:
+
+- My initial release.yaml file had the immediate sync built-in and tried to make a POST call but failed due to the nature of the setup. I had to remove that part, update ArgoCD to poll every 20 seconds or so for faster relase instead of the default 3 min wait.
+
 
 
 

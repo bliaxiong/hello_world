@@ -56,8 +56,9 @@ jobs:
 
   # ------------------------------------------------------------------
   # Deploy to Staging
-  # Runs automatically after every successful CI build on main.
+  # Runs automatically after every successful CI build on master.
   # Uses the "staging" GitHub Environment (no approval required).
+  # Argo CD will detect the git change and sync via polling.
   # ------------------------------------------------------------------
   deploy-staging:
     name: Deploy → Staging
@@ -93,45 +94,12 @@ jobs:
           git diff --cached --quiet || git commit -m "chore(staging): promote ${{ needs.resolve-tag.outputs.tag }} [skip ci]"
           git push
 
-      # Tell Argo CD to sync immediately rather than waiting for its next
-      # polling interval (default 3 min). Requires ARGOCD_SERVER + ARGOCD_AUTH_TOKEN
-      # secrets set in the "staging" GitHub Environment.
-      - name: Sync Argo CD — staging
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        run: |
-          curl -sSf -X POST \
-            -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${ARGOCD_SERVER}/api/v1/applications/hello-world-staging/sync" \
-            -d '{"prune":true}'
-
-      - name: Wait for Argo CD rollout
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        run: |
-          for i in $(seq 1 20); do
-            STATUS=$(curl -sf \
-              -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
-              "${ARGOCD_SERVER}/api/v1/applications/hello-world-staging" \
-              | jq -r '.status.sync.status + "/" + .status.health.status')
-            echo "[$i/20] $STATUS"
-            if [ "$STATUS" = "Synced/Healthy" ]; then
-              echo "Staging is healthy."
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "Timed out waiting for staging to become healthy."
-          exit 1
-
   # ------------------------------------------------------------------
   # Deploy to Production
   # Requires the "production" GitHub Environment which should be
   # configured with required reviewers / approval rules in repo
   # Settings → Environments → production.
+  # Argo CD will detect the git change and sync via polling.
   # ------------------------------------------------------------------
   deploy-production:
     name: Deploy → Production
@@ -171,34 +139,3 @@ jobs:
           git add helm/hello-world/values-production.yaml
           git diff --cached --quiet || git commit -m "chore(production): promote ${{ needs.resolve-tag.outputs.tag }} [skip ci]"
           git push
-
-      - name: Sync Argo CD — production
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        run: |
-          curl -sSf -X POST \
-            -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${ARGOCD_SERVER}/api/v1/applications/hello-world-production/sync" \
-            -d '{"prune":true}'
-
-      - name: Wait for Argo CD rollout
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        run: |
-          for i in $(seq 1 20); do
-            STATUS=$(curl -sf \
-              -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
-              "${ARGOCD_SERVER}/api/v1/applications/hello-world-production" \
-              | jq -r '.status.sync.status + "/" + .status.health.status')
-            echo "[$i/20] $STATUS"
-            if [ "$STATUS" = "Synced/Healthy" ]; then
-              echo "Production is healthy."
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "Timed out waiting for production to become healthy."
-          exit 1
