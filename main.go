@@ -14,11 +14,15 @@ func main() {
 		port = "8080"
 	}
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Hello World")
+		if _, err := fmt.Fprintln(w, "Hello World"); err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
 	})
+
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
