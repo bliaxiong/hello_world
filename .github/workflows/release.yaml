@@ -101,41 +101,41 @@ jobs:
   # Settings → Environments → production.
   # Argo CD will detect the git change and sync via polling.
   # ------------------------------------------------------------------
-  deploy-production:
-    name: Deploy → Production
-    runs-on: ubuntu-latest
-    needs: [resolve-tag, deploy-staging]
-    # For manual dispatch targeting production, skip the staging dep
-    if: >
-      needs.resolve-tag.result == 'success' &&
-      (
-        needs.deploy-staging.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
-      )
-    environment:
-      name: production
-      url: https://hello-world.prod.internal
+  # deploy-production:
+  #   name: Deploy → Production
+  #   runs-on: ubuntu-latest
+  #   needs: [resolve-tag, deploy-staging]
+  #   # For manual dispatch targeting production, skip the staging dep
+  #   if: >
+  #     needs.resolve-tag.result == 'success' &&
+  #     (
+  #       needs.deploy-staging.result == 'success' ||
+  #       (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
+  #     )
+  #   environment:
+  #     name: production
+  #     url: https://hello-world.prod.internal
 
-    permissions:
-      contents: write
+  #   permissions:
+  #     contents: write
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Pull latest so we have the staging commit before writing prod
-          ref: master
-          token: ${{ secrets.GITHUB_TOKEN }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         # Pull latest so we have the staging commit before writing prod
+  #         ref: master
+  #         token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update production image tag
-        env:
-          NEW_TAG: ${{ needs.resolve-tag.outputs.tag }}
-        run: |
-          sed -i "s/^  tag:.*/  tag: \"${NEW_TAG}\"/" helm/hello-world/values-production.yaml
+  #     - name: Update production image tag
+  #       env:
+  #         NEW_TAG: ${{ needs.resolve-tag.outputs.tag }}
+  #       run: |
+  #         sed -i "s/^  tag:.*/  tag: \"${NEW_TAG}\"/" helm/hello-world/values-production.yaml
 
-      - name: Commit production tag
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add helm/hello-world/values-production.yaml
-          git diff --cached --quiet || git commit -m "chore(production): promote ${{ needs.resolve-tag.outputs.tag }} [skip ci]"
-          git push
+  #     - name: Commit production tag
+  #       run: |
+  #         git config user.name  "github-actions[bot]"
+  #         git config user.email "github-actions[bot]@users.noreply.github.com"
+  #         git add helm/hello-world/values-production.yaml
+  #         git diff --cached --quiet || git commit -m "chore(production): promote ${{ needs.resolve-tag.outputs.tag }} [skip ci]"
+  #         git push
