@@ -6,8 +6,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/you/hello-world
-    targetRevision: main
+    repoURL: https://github.com/bliaxiong/hello-world
+    targetRevision: master
     path: helm/hello-world
     helm:
       valueFiles:

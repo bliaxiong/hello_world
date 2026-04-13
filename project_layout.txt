@@ -1,0 +1,27 @@
+hello-world/                          ← repo root
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                    ← builds, tests, pushes image
+│       └── release.yml               ← promotes image through environments
+│
+├── helm/
+│   └── hello-world/
+│       ├── Chart.yaml                ← chart metadata (name, version)
+│       ├── values.yaml               ← base defaults (image tag lives here)
+│       ├── values-staging.yaml       ← staging overrides
+│       ├── values-production.yaml    ← production overrides
+│       └── templates/
+│           ├── _helpers.tpl
+│           ├── deployment.yaml
+│           └── service.yaml
+│
+├── argocd/
+│   ├── application-staging.yaml      ← tells Argo CD to watch helm/ + use values-staging.yaml
+│   └── application-production.yaml
+│
+├── main.go
+├── main_test.go
+├── Dockerfile
+├── go.mod
+└── README.md

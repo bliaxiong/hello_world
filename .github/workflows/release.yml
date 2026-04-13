@@ -4,7 +4,7 @@ on:
   # Triggered automatically when CI completes successfully on main
   workflow_run:
     workflows: ["CI"]
-    branches: ["main"]
+    branches: ["master"]
     types: [completed]
 
   # Also allow a manual promotion to production with an explicit tag/SHA
@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Pull latest so we have the staging commit before writing prod
-          ref: main
+          ref: master
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update production image tag
