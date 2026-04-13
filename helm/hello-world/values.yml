@@ -9,7 +9,7 @@ image:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 8080
+  targetPort: 9000
 
 ingress:
   enabled: false
@@ -34,14 +34,14 @@ autoscaling:
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 8080
+    port: 9000
   initialDelaySeconds: 5
   periodSeconds: 10
 
 readinessProbe:
   httpGet:
     path: /healthz
-    port: 8080
+    port: 9000
   initialDelaySeconds: 3
   periodSeconds: 5
 
