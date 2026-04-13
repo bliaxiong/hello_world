@@ -1,0 +1,16 @@
+# Staging overrides
+# Applied on top of values.yaml — only specify what differs from defaults.
+
+replicaCount: 1
+
+ingress:
+  enabled: true
+  host: hello-world.staging.internal
+
+resources:
+  requests:
+    cpu: "50m"
+    memory: "32Mi"
+  limits:
+    cpu: "200m"
+    memory: "64Mi"

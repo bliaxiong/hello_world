@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hello-world-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/you/hello-world
+    targetRevision: main
+    path: helm/hello-world
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      prune: true        # removes resources deleted from git
+      selfHeal: true     # reverts manual kubectl changes
+

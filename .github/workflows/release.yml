@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  # Triggered automatically when CI completes successfully on main
+  workflow_run:
+    workflows: ["CI"]
+    branches: ["main"]
+    types: [completed]
+
+  # Also allow a manual promotion to production with an explicit tag/SHA
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (e.g. sha-abc1234)"
+        required: true
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ------------------------------------------------------------------
+  # Resolve which image tag we are promoting.
+  # When triggered by workflow_run we read the tag that CI wrote into
+  # values.yaml; when triggered manually we use the input directly.
+  # ------------------------------------------------------------------
+  resolve-tag:
+    name: Resolve image tag
+    runs-on: ubuntu-latest
+    # Don't proceed if the upstream CI workflow failed
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      tag: ${{ steps.get-tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get tag from values.yaml (workflow_run path)
+        id: get-tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            TAG=$(grep '^\s*tag:' helm/hello-world/values.yaml | awk '{print $2}' | tr -d '"')
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ------------------------------------------------------------------
+  # Deploy to Staging
+  # Runs automatically after every successful CI build on main.
+  # Uses the "staging" GitHub Environment (no approval required).
+  # ------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy → Staging
+    runs-on: ubuntu-latest
+    needs: resolve-tag
+    # Skip staging when a manual dispatch targets production directly
+    if: >
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://hello-world.staging.internal
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update staging image tag
+        env:
+          NEW_TAG: ${{ needs.resolve-tag.outputs.tag }}
+        run: |
+          sed -i "s/^  tag:.*/  tag: \"${NEW_TAG}\"/" helm/hello-world/values-staging.yaml
+
+      - name: Commit staging tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/hello-world/values-staging.yaml
+          git diff --cached --quiet || git commit -m "chore(staging): promote ${{ needs.resolve-tag.outputs.tag }} [skip ci]"
+          git push
+
+      # Tell Argo CD to sync immediately rather than waiting for its next
+      # polling interval (default 3 min). Requires ARGOCD_SERVER + ARGOCD_AUTH_TOKEN
+      # secrets set in the "staging" GitHub Environment.
+      - name: Sync Argo CD — staging
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          curl -sSf -X POST \
+            -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${ARGOCD_SERVER}/api/v1/applications/hello-world-staging/sync" \
+            -d '{"prune":true}'
+
+      - name: Wait for Argo CD rollout
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          for i in $(seq 1 20); do
+            STATUS=$(curl -sf \
+              -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+              "${ARGOCD_SERVER}/api/v1/applications/hello-world-staging" \
+              | jq -r '.status.sync.status + "/" + .status.health.status')
+            echo "[$i/20] $STATUS"
+            if [ "$STATUS" = "Synced/Healthy" ]; then
+              echo "Staging is healthy."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for staging to become healthy."
+          exit 1
+
+  # ------------------------------------------------------------------
+  # Deploy to Production
+  # Requires the "production" GitHub Environment which should be
+  # configured with required reviewers / approval rules in repo
+  # Settings → Environments → production.
+  # ------------------------------------------------------------------
+  deploy-production:
+    name: Deploy → Production
+    runs-on: ubuntu-latest
+    needs: [resolve-tag, deploy-staging]
+    # For manual dispatch targeting production, skip the staging dep
+    if: >
+      needs.resolve-tag.result == 'success' &&
+      (
+        needs.deploy-staging.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
+      )
+    environment:
+      name: production
+      url: https://hello-world.prod.internal
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Pull latest so we have the staging commit before writing prod
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update production image tag
+        env:
+          NEW_TAG: ${{ needs.resolve-tag.outputs.tag }}
+        run: |
+          sed -i "s/^  tag:.*/  tag: \"${NEW_TAG}\"/" helm/hello-world/values-production.yaml
+
+      - name: Commit production tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/hello-world/values-production.yaml
+          git diff --cached --quiet || git commit -m "chore(production): promote ${{ needs.resolve-tag.outputs.tag }} [skip ci]"
+          git push
+
+      - name: Sync Argo CD — production
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          curl -sSf -X POST \
+            -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${ARGOCD_SERVER}/api/v1/applications/hello-world-production/sync" \
+            -d '{"prune":true}'
+
+      - name: Wait for Argo CD rollout
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          for i in $(seq 1 20); do
+            STATUS=$(curl -sf \
+              -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+              "${ARGOCD_SERVER}/api/v1/applications/hello-world-production" \
+              | jq -r '.status.sync.status + "/" + .status.health.status')
+            echo "[$i/20] $STATUS"
+            if [ "$STATUS" = "Synced/Healthy" ]; then
+              echo "Production is healthy."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for production to become healthy."
+          exit 1

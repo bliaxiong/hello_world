@@ -1,0 +1,26 @@
+# Production overrides
+# Applied on top of values.yaml — only specify what differs from defaults.
+
+replicaCount: 2
+
+ingress:
+  enabled: true
+  host: hello-world.prod.internal
+  tls:
+    - secretName: hello-world-tls
+      hosts:
+        - hello-world.prod.internal
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "64Mi"
+  limits:
+    cpu: "500m"
+    memory: "128Mi"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
