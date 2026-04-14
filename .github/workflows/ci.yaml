@@ -10,6 +10,10 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+      packages: write
+
     steps:
       # Step 1 - Check out the code
       - name: Checkout
@@ -59,3 +63,16 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+
+      # Step 8 - Write the SHA tag back to values.yaml so the Release workflow can pin it
+      - name: Update image tag in values.yaml
+        if: github.event_name == 'push'
+        env:
+          NEW_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          sed -i "s/^  tag:.*/  tag: \"${NEW_TAG}\"/" helm/hello-world/values.yaml
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/hello-world/values.yaml
+          git diff --cached --quiet || git commit -m "chore: update image tag to ${NEW_TAG} [skip ci]"
+          git push
